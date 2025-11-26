@@ -1835,6 +1835,10 @@
 	callnative BS_RestoreSavedMove
 	.endm
 
+	.macro processPreAttackAnimFuncs
+	callnative BS_ProcessPreAttackAnimationFuncs
+	.endm
+
 @ helpful macros
 	.macro setstatchanger stat:req, stages:req, down:req
 	setbyte sSTATCHANGER, \stat | \stages << 3 | \down << 7

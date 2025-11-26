@@ -198,7 +198,7 @@ struct SpecialStatus
     u8 instructedChosenTarget:3;
     u8 berryReduced:1;
     u8 neutralizingGasRemoved:1;    // See VARIOUS_TRY_END_NEUTRALIZING_GAS
-    u8 padding:1;
+    u8 preHitAbilityDone:1;
     // End of byte
     u8 gemParam;
     // End of byte
@@ -668,7 +668,7 @@ struct BattleStruct
     u8 multipleSwitchInState:2;
     u8 multipleSwitchInCursor:3;
     u8 sleepClauseNotBlocked:1;
-    u8 padding1:1;
+    u8 shouldPrintPreHitAbilityText:1;
     u8 multipleSwitchInSortedBattlers[MAX_BATTLERS_COUNT];
     void (*savedCallback)(void);
     u16 usedHeldItems[PARTY_SIZE][NUM_BATTLE_SIDES]; // For each party member and side. For harvest, recycle

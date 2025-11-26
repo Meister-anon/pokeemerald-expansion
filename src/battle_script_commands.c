@@ -309,6 +309,9 @@ enum GiveCaughtMonStates
 #define TAG_LVLUP_BANNER_MON_ICON 55130
 
 static void TrySetDestinyBondToHappen(void);
+static void TryActivatePreHitAbilities(u32 battlerDef);
+static bool32 DoesTwoTurnEffectAttackNow(u32 battler, u32 MoveId);
+static inline bool32 GetIsAccCheckAfterAtkString(u32 battler, u32 moveId);
 static u32 ChangeStatBuffs(u32 battler, s8 statValue, u32 statId, union StatChangeFlags flags, u32 stats, const u8 *BS_ptr);
 static bool32 IsMonGettingExpSentOut(void);
 static void InitLevelUpBanner(void);
@@ -336,6 +339,7 @@ static void ResetValuesForCalledMove(void);
 static void TryRestoreDamageAfterCheekPouch(u32 battler);
 static bool32 TrySymbiosis(u32 battler, u32 itemId, bool32 moveEnd);
 static bool32 CanAbilityShieldActivateForBattler(u32 battler);
+static bool32 CheckIfCanFireTwoTurnMoveNow(u8 battler, bool8 checkChargeTurnEffects);
 
 static void Cmd_attackcanceler(void);
 static void Cmd_accuracycheck(void);
@@ -1003,6 +1007,30 @@ bool32 ProteanTryChangeType(u32 battler, u32 ability, u32 move, u32 moveType)
     return FALSE;
 }
 
+static inline bool32 GetIsAccCheckAfterAtkString(u32 battler, u32 moveId)
+{
+    moveId = SanitizeMoveId(moveId);
+
+    if (IS_BATTLER_OF_TYPE(battler, TYPE_GHOST)
+    && GetMoveEffect(moveId) == EFFECT_CURSE)
+        return TRUE;
+
+    if (!DoesTwoTurnEffectAttackNow(battler, moveId))
+        return TRUE;
+    
+    return gBattleMoveEffects[GetMoveEffect(moveId)].hasAccCheckAfterAtkstring;
+}
+
+static inline bool32 IsFutureSightAttackLanding(u32 battlerDef, u32 MoveId)
+{
+    if (gWishFutureKnock.futureSightCounter[battlerDef] == gBattleTurnCounter
+    && gWishFutureKnock.futureSightMove[battlerDef] == MoveId)
+        return TRUE;
+
+    return FALSE;
+
+}
+
 bool32 IsMoveNotAllowedInSkyBattles(u32 move)
 {
     return (gBattleStruct->isSkyBattle && IsMoveSkyBattleBanned(gCurrentMove));
@@ -1465,7 +1493,7 @@ static void AccuracyCheck(bool32 recalcDragonDarts, const u8 *nextInstr, const u
                     return;
                 }
 
-                if (GetMovePower(move) != 0)
+                if (GetMovePower(move) != 0) //not status move but also includes struggle? so pwr 0 is typeless 
                 {
                     struct DamageContext ctx = {0};
                     ctx.battlerAtk = gBattlerAttacker;
@@ -1480,6 +1508,12 @@ static void AccuracyCheck(bool32 recalcDragonDarts, const u8 *nextInstr, const u
 
                     CalcTypeEffectivenessMultiplier(&ctx);
                 }
+            }
+            else
+            {
+                if (GetIsAccCheckAfterAtkString(gBattlerAttacker, move)
+                || IsFutureSightAttackLanding(battlerDef, move))
+                    TryActivatePreHitAbilities(battlerDef);
             }
         }
 
@@ -1518,8 +1552,24 @@ static void Cmd_attackstring(void)
         PrepareStringBattle(STRINGID_USEDMOVE, gBattlerAttacker);
         gHitMarker |= HITMARKER_ATTACKSTRING_PRINTED;
     }
+    
+    if (!GetIsAccCheckAfterAtkString(gBattlerAttacker, gCurrentMove)
+    && GetMoveEffect(gCurrentMove) != EFFECT_FUTURE_SIGHT
+    && !gBattleStruct->moveResultFlags[gBattlerTarget] & MOVE_RESULT_MISSED)
+        TryActivatePreHitAbilities(gBattlerTarget);
+
     gBattlescriptCurrInstr = cmd->nextInstr;
     gBattleCommunication[MSG_DISPLAY] = 0;
+}
+
+static bool32 DoesTwoTurnEffectAttackNow(u32 battler, u32 MoveId)
+{
+    
+    if ((gBattleMoveEffects[GetMoveEffect(gCurrentMove)].semiInvulnerableEffect == TRUE && gBattleScripting.animTurn == 1)
+    || (IsTwoTurnNotSemiInvulnerableMove(battler, MoveId) && CheckIfCanFireTwoTurnMoveNow(battler, FALSE))) //think false is correct for this?
+        return TRUE;
+
+    return FALSE;
 }
 
 static void Cmd_ppreduce(void)
@@ -2117,7 +2167,26 @@ static inline bool32 TryActivateWeaknessBerry(u32 battlerDef)
         BattleScriptCall(BattleScript_BerryReduceDmg);
         return TRUE;
     }
+    return FALSE;
+}
 
+static void TryActivatePreHitAbilities(u32 battlerDef)
+{
+    if (!gSpecialStatuses[battlerDef].preHitAbilityDone)
+        AbilityBattleEffects(ABILITYEFFECT_PRE_HIT_REACT, battlerDef, 0, 0, 0);
+}
+
+static inline bool32 TryPrintPreHitAbilityActivationText(u32 battlerDef)
+{
+    u32 moveType = GetBattleMoveType(gCurrentMove);
+
+    if (gBattleStruct->shouldPrintPreHitAbilityText)
+    {
+        PREPARE_TYPE_BUFFER(gBattleTextBuff1, moveType);
+        BattleScriptCall(BattleScript_ColorChangeActivates);
+        gBattleStruct->shouldPrintPreHitAbilityText = FALSE;
+        return TRUE;
+    }    
     return FALSE;
 }
 
@@ -2151,8 +2220,10 @@ static bool32 ProcessPreAttackAnimationFuncs(void)
 
             if (TryTeraShellDistortTypeMatchups(battlerDef))
                 return TRUE;
-            if (TryActivateWeaknessBerry(battlerDef))
+            if (TryPrintPreHitAbilityActivationText(battlerDef)) //put above weakness berry as changes type
                 return TRUE;
+            if (TryActivateWeaknessBerry(battlerDef))
+                return TRUE;            
         }
     }
     else
@@ -2161,11 +2232,23 @@ static bool32 ProcessPreAttackAnimationFuncs(void)
             return TRUE;
         if (TryTeraShellDistortTypeMatchups(gBattlerTarget))
             return TRUE;
+        if (TryPrintPreHitAbilityActivationText(gBattlerTarget))
+                return TRUE;
         if (TryActivateWeaknessBerry(gBattlerTarget))
             return TRUE;
     }
 
     return FALSE;
+}
+
+//should work fine long as no effects
+//that run type check before animations -which i believe aren't
+void BS_ProcessPreAttackAnimationFuncs(void)
+{
+      NATIVE_ARGS();
+      if (ProcessPreAttackAnimationFuncs())
+        return;
+      gBattlescriptCurrInstr = cmd->nextInstr;
 }
 
 static void Cmd_attackanimation(void)

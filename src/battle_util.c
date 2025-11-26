@@ -4622,21 +4622,6 @@ u32 AbilityBattleEffects(u32 caseID, u32 battler, u32 ability, u32 special, u32 
                 effect++;
             }
             break;
-        case ABILITY_COLOR_CHANGE:
-            if (move != MOVE_STRUGGLE
-             && !IsBattleMoveStatus(move)
-             && IsBattlerTurnDamaged(battler)
-             && !IS_BATTLER_OF_TYPE(battler, moveType)
-             && moveType != TYPE_STELLAR
-             && moveType != TYPE_MYSTERY
-             && IsBattlerAlive(battler))
-            {
-                SET_BATTLER_TYPE(battler, moveType);
-                PREPARE_TYPE_BUFFER(gBattleTextBuff1, moveType);
-                BattleScriptCall(BattleScript_ColorChangeActivates);
-                effect++;
-            }
-            break;
         case ABILITY_GOOEY:
         case ABILITY_TANGLING_HAIR:
             if (IsBattlerAlive(gBattlerAttacker)
@@ -5282,6 +5267,29 @@ u32 AbilityBattleEffects(u32 caseID, u32 battler, u32 ability, u32 special, u32 
             break;
         }
         break;
+    case ABILITYEFFECT_PRE_HIT_REACT:
+
+        gLastUsedAbility = GetBattlerAbility(battler);
+        switch (gLastUsedAbility)
+        {
+        case ABILITY_COLOR_CHANGE:
+            if (move != MOVE_STRUGGLE
+            && IsBattlerAlive(battler)
+            && !IsBattleMoveStatus(move)
+            && !IS_BATTLER_OF_TYPE(battler, moveType)
+            && moveType != TYPE_STELLAR
+            && moveType != TYPE_MYSTERY
+            && !gSpecialStatuses[battler].preHitAbilityDone
+            )
+            {
+                gBattlerAbility = battler; //unsure if need
+                gBattleStruct->shouldPrintPreHitAbilityText = TRUE;
+                gSpecialStatuses[battler].preHitAbilityDone = TRUE;
+                SET_BATTLER_TYPE(battler, moveType);
+                effect++;//affect works but can't yet workout how to get battlescript and ability popup working
+            }            
+            break;//unsure if this version of effect believe would not be affected by future sight or doom desire
+        }
     }
 
     if (effect && gLastUsedAbility != 0xFFFF)

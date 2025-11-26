@@ -56,6 +56,7 @@ enum {
     ABILITYEFFECT_OPPORTUNIST,
     ABILITYEFFECT_SWITCH_IN_STATUSES,
     ABILITYEFFECT_ON_SWITCHIN_IMMUNITIES,
+    ABILITYEFFECT_PRE_HIT_REACT, //Put
 };
 
 // For the first argument of ItemBattleEffects, to deteremine which block of item effects to try

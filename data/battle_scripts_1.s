@@ -6150,6 +6150,7 @@ BattleScript_CheckDoomDesireMiss::
 	accuracycheck BattleScript_FutureAttackMiss, MOVE_DOOM_DESIRE
 BattleScript_FutureAttackAnimate::
 	critcalc
+	processPreAttackAnimFuncs @terra strong wind and color change
 	damagecalc
 	adjustdamage
 	jumpifmovehadnoeffect BattleScript_DoFutureAttackResult

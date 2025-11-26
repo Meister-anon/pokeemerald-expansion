@@ -16,7 +16,8 @@ struct __attribute__((packed, aligned(2))) BattleMoveEffect
     u16 twoTurnEffect:1;
     u16 semiInvulnerableEffect:1;
     u16 usesProtectCounter:1;
-    u16 padding:9;
+    u16 hasAccCheckAfterAtkstring:1; //for new pre hit ability effect, keep an eye out for effects that go to same battlescript where condition should be TRUE
+    u16 padding:8;
 };
 
 #define EFFECTS_ARR(...) (const struct AdditionalEffect[]) {__VA_ARGS__}
