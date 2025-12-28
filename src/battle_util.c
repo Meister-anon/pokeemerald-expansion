@@ -1,6 +1,7 @@
 #include "global.h"
 #include "battle.h"
 #include "battle_anim.h"
+#include "battle_anim_scripts.h"
 #include "battle_arena.h"
 #include "battle_environment.h"
 #include "battle_pyramid.h"
@@ -202,7 +203,8 @@ static const struct BattleWeatherInfo sBattleWeatherInfo[BATTLE_WEATHER_COUNT] =
         .endMessage = B_MSG_WEATHER_END_FOG,
         .continuesMessage = B_MSG_WEATHER_TURN_FOG,
         .animation = B_ANIM_FOG_CONTINUES,
-    },
+    },//dont replace just add above moon and acid rain
+    //rock moon stone and slimy rock like limestone
 
     [BATTLE_WEATHER_STRONG_WINDS] =
     {
@@ -1838,6 +1840,18 @@ s32 GetDrainedBigRootHp(u32 battler, s32 hp)
     return hp;
 }
 
+s32 MistyTerrainHealBoost(u32 battler, s32 healamount)
+{
+    if (IsBattlerTerrainAffected(battler, GetBattlerAbility(battler), GetBattlerHoldEffect(battler), STATUS_FIELD_MISTY_TERRAIN))
+    {
+        healamount = (healamount * 130) / 100;
+        if (healamount == 0)
+            healamount = 1;    
+    }
+
+    return healamount;
+}
+
 // Should always be the last check. Otherwise the ability might be wrongly recorded.
 bool32 IsAbilityAndRecord(u32 battler, enum Ability battlerAbility, enum Ability abilityToCheck)
 {
@@ -2845,10 +2859,13 @@ static enum MoveCanceler CancelerProtean(struct BattleContext *ctx)
     return MOVE_STEP_SUCCESS;
 }
 
+
+//dampbattler or fog on field
 static enum MoveCanceler CancelerExplodingDamp(struct BattleContext *ctx)
 {
     u32 dampBattler = IsAbilityOnField(ABILITY_DAMP);
-    if (dampBattler && IsMoveDampBanned(ctx->currentMove))
+    if ((dampBattler)
+    && IsMoveDampBanned(ctx->currentMove))
     {
         gBattleScripting.battler = dampBattler - 1;
         gBattlescriptCurrInstr = BattleScript_DampStopsExplosion;
@@ -2858,6 +2875,23 @@ static enum MoveCanceler CancelerExplodingDamp(struct BattleContext *ctx)
     return MOVE_STEP_SUCCESS;
 }
 
+//think instead of multihit effect
+//can just put into move struct value
+//ismultihit move and have the separation be
+//on if move uses strikecount
+//change here would simply be go to canceler only if multihit move
+//and in here, set strike count logic first
+//then just use an else for everything else
+//i.e is fixedmultihit  can say if has strike count
+//oh dont need function can just use getstrikecout as below
+//think will just replae effect multi hit 
+//don't need include moves w strike count
+//just use isvariablemultihit
+//believe should also allow for more freedom
+//within category
+//won't need whole separate script for effects
+//can just adjust acc checks etc.
+//so if multihit can just continue through a miss until dec hits 0
 static enum MoveCanceler CancelerMultihitMoves(struct BattleContext *ctx)
 {
     if (GetMoveEffect(ctx->currentMove) == EFFECT_MULTI_HIT)
@@ -2987,6 +3021,7 @@ static enum MoveCanceler (*const sMoveSuccessOrderCancelers[])(struct BattleCont
     [CANCELER_STANCE_CHANGE_1] = CancelerStanceChangeOne,
     [CANCELER_SKY_DROP] = CancelerSkyDrop,
     [CANCELER_RECHARGE] = CancelerRecharge,
+    //put yawn here
     [CANCELER_ASLEEP_OR_FROZEN] = CancelerAsleepOrFrozen,
     [CANCELER_OBEDIENCE] = CancelerObedience,
     [CANCELER_POWER_POINTS] = CancelerPowerPoints,
@@ -3824,7 +3859,7 @@ bool32 TryFieldEffects(enum FieldEffectCases caseId)
             BattleScriptPushCursorAndCallback(BattleScript_OverworldTerrain);
             effect = TRUE;
         }
-        else if (B_OVERWORLD_FOG >= GEN_8
+        /*else if (B_OVERWORLD_FOG >= GEN_8
               && (GetCurrentWeather() == WEATHER_FOG_HORIZONTAL || GetCurrentWeather() == WEATHER_FOG_DIAGONAL)
               && !(gFieldStatuses & STATUS_FIELD_MISTY_TERRAIN))
         {
@@ -3833,7 +3868,8 @@ bool32 TryFieldEffects(enum FieldEffectCases caseId)
             gBattleCommunication[MULTISTRING_CHOOSER] = B_MSG_TERRAIN_SET_MISTY;
             BattleScriptPushCursorAndCallback(BattleScript_OverworldTerrain);
             effect = TRUE;
-        }
+        }//think change to fog weather vsonic
+        break;*/
         break;
     case FIELD_EFFECT_OVERWORLD_WEATHER:
         if (!(gBattleTypeFlags & BATTLE_TYPE_RECORDED))
@@ -7274,7 +7310,7 @@ static inline u32 CalcMoveBasePowerAfterModifiers(struct DamageContext *ctx)
             modifier = uq4_12_multiply(modifier, UQ_4_12(2.0));
         break;
     case EFFECT_SOLAR_BEAM:
-        if (IsBattlerWeatherAffected(battlerAtk, (B_WEATHER_HAIL | B_WEATHER_SANDSTORM | B_WEATHER_RAIN | B_WEATHER_SNOW | B_WEATHER_FOG)))
+        if (IsBattlerWeatherAffected(battlerAtk, B_WEATHER_LOW_LIGHT))
             modifier = uq4_12_multiply(modifier, UQ_4_12(0.5));
         break;
     case EFFECT_STOMPING_TANTRUM:
@@ -8412,11 +8448,47 @@ static inline uq4_12_t GetOtherModifiers(struct DamageContext *ctx)
     dmg = uq4_12_multiply_by_int_half_down(modifier, dmg); \
 } while (0)
 
+const u8 *const gPlayCryanims[] =
+{
+    gBattleAnimMove_AlluringVoice,
+    gBattleAnimMove_Boomburst,
+    gBattleAnimMove_RelicSong,
+    gBattleAnimMove_TorchSong,
+    gBattleAnimMove_HyperVoice,
+    gBattleAnimMove_Round,
+    gBattleAnimMove_Chatter,
+    gBattleAnimMove_RoarOfTime,
+    gBattleAnimMove_DisarmingVoice,
+    gBattleAnimMove_HyperspaceFury
+};
+
+//used to exclude for bottom effect doesn't include status moves that do so
+//well nah might as well include all
+static bool32 DoesMoveUseCryInBattleAnim(u16 move)
+{
+    u32 i;
+    GetMoveAnimationScript(move);
+
+    for (i = 0; i < sizeof(gPlayCryanims); i++)
+    {
+        if (GetMoveAnimationScript(move) == gPlayCryanims[i])
+            return TRUE;
+    }
+
+    return FALSE;
+
+
+}
+
+//idk where this applies but need to adjust this
+//to get my update for cry to play on high roll or crit
+//may need make new ewram value to store that it should do so
 static inline s32 DoMoveDamageCalcVars(struct DamageContext *ctx)
 {
     s32 dmg;
     u32 userFinalAttack;
     u32 targetFinalDefense;
+    u32 dmgroll = DMG_ROLL_PERCENT_HI - RandomUniform(RNG_DAMAGE_MODIFIER, 0, DMG_ROLL_PERCENT_HI - DMG_ROLL_PERCENT_LO);
 
     if (ctx->fixedBasePower)
         gBattleMovePower = ctx->fixedBasePower;
@@ -8435,9 +8507,14 @@ static inline s32 DoMoveDamageCalcVars(struct DamageContext *ctx)
 
     if (ctx->randomFactor)
     {
-        dmg *= DMG_ROLL_PERCENT_HI - RandomUniform(RNG_DAMAGE_MODIFIER, 0, DMG_ROLL_PERCENT_HI - DMG_ROLL_PERCENT_LO);
+        dmg *= dmgroll;
         dmg /= 100;
-    }
+
+        if (gMain.inBattle && dmgroll == DMG_ROLL_PERCENT_HI
+        && !DoesMoveUseCryInBattleAnim(ctx->move))
+            PlayCry_Normal(gBattleMons[ctx->battlerAtk].species, 25);
+
+    } //tested works
     else // Apply rest of modifiers in the ai function
     {
         if (dmg == 0)
@@ -8445,6 +8522,7 @@ static inline s32 DoMoveDamageCalcVars(struct DamageContext *ctx)
         return dmg;
     }
 
+    
     dmg = ApplyModifiersAfterDmgRoll(ctx, dmg);
 
     if (dmg == 0)
@@ -10448,6 +10526,8 @@ void ClearDamageCalcResults(void)
         gBattleStruct->moldBreakerActive = FALSE;
 }
 
+//think I don't need this, places where this is
+//it also checks for destinybond status
 bool32 DoesDestinyBondFail(u32 battler)
 {
     return GetConfig(CONFIG_DESTINY_BOND_FAIL) >= GEN_7 && gBattleMons[battler].volatiles.destinyBond;
@@ -10935,11 +11015,11 @@ u32 GetTotalAccuracy(u32 battlerAtk, u32 battlerDef, u32 move, enum Ability atkA
     if (gFieldStatuses & STATUS_FIELD_GRAVITY)
         calc = (calc * 5) / 3; // 1.66 Gravity acc boost
 
-    if (B_AFFECTION_MECHANICS == TRUE && GetBattlerAffectionHearts(battlerDef) == AFFECTION_FIVE_HEARTS)
-        calc = (calc * 90) / 100;
+    //if (B_AFFECTION_MECHANICS == TRUE && GetBattlerAffectionHearts(battlerDef) == AFFECTION_FIVE_HEARTS)
+    //    calc = (calc * 90) / 100;
 
-    if (HasWeatherEffect() && gBattleWeather & B_WEATHER_FOG)
-        calc = (calc * 60) / 100; // modified by 3/5
+    //if (HasWeatherEffect() && gBattleWeather & B_WEATHER_FOG)
+    //    calc = (calc * 60) / 100; // modified by 3/5
 
     return calc;
 }
@@ -11069,6 +11149,10 @@ static u32 GetMetronomeMove(void)
     return move;
 }
 
+//think plan adjust this to exclude move
+//that user alraedy has unless said move
+//is out of PP.
+//Should make it a bit more predictable slightly...
 static u32 GetAssistMove(void)
 {
     u32 move = MOVE_NONE;

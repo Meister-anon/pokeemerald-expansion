@@ -1043,7 +1043,7 @@ BattleScript_EffectStrengthSap::
 	setmoveresultflags MOVE_RESULT_MISSED @ TODO: Is this even necessary?
 	goto BattleScript_MoveEnd
 BattleScript_StrengthSapTryLower:
-	getstatvalue STAT_ATK
+	getstatvalue STAT_ATK	@ok THIS is what sets value neede for healing
 	jumpiffullhp BS_ATTACKER, BattleScript_StrengthSapMustLower
 BattleScript_StrengthSapAnimation:
 	attackanimation
@@ -3245,9 +3245,9 @@ BattleScript_DoSnore::
 	accuracycheck BattleScript_MoveMissedPause, ACC_CURR_MOVE
 	goto BattleScript_HitFromCritCalc
 
-BattleScript_EffectConversion2::
+BattleScript_EffectConversionZ::
 	attackcanceler
-	settypetorandomresistance BattleScript_ButItFailed
+	changetypetoresisttarget BattleScript_ButItFailed
 	attackanimation
 	waitanimation
 	printstring STRINGID_PKMNCHANGEDTYPE
@@ -3335,6 +3335,7 @@ BattleScript_EffectMeanLook::
 	attackcanceler
 	accuracycheck BattleScript_ButItFailed, NO_ACC_CALC_CHECK_LOCK_ON
 	jumpifvolatile BS_TARGET, VOLATILE_ESCAPE_PREVENTION, BattleScript_ButItFailed
+	@escapePreventionChecks BS_TARGET, BattleScript_ButItFailed
 	jumpifsubstituteblocks BattleScript_ButItFailed
 .if B_GHOSTS_ESCAPE >= GEN_6
 	jumpiftype BS_TARGET, TYPE_GHOST, BattleScript_ButItFailed
@@ -4165,7 +4166,13 @@ BattleScript_EffectYawn::
 	waitanimation
 	printstring STRINGID_PKMNWASMADEDROWSY
 	waitmessage B_WAIT_TIME_LONG
+	@jumpclearRage BattleScript_RageEndsRet @jumpand clear rage
 	goto BattleScript_MoveEnd
+
+BattleScript_RageEndsRet::
+	@printstring STRINGID_DEF_RAGEABATED
+	waitmessage B_WAIT_TIME_SHORT
+	goto BattleScript_YawnEnd
 
 BattleScript_MoveEffectYawnSide::
 	printstring STRINGID_PKMNWASMADEDROWSY
@@ -4550,7 +4557,7 @@ BattleScript_LocalBattleWonReward::
 	waitmessage B_WAIT_TIME_LONG
 BattleScript_PayDayMoneyAndPickUpItems::
 	givepaydaymoney
-	pickup
+	generateendbattleitem
 	end2
 
 BattleScript_LocalBattleLost::
@@ -4673,7 +4680,7 @@ BattleScript_FrontierTrainerBattleWon_LoseTexts:
 	printstring STRINGID_TRAINER2LOSETEXT
 BattleScript_TryPickUpItems:
 	jumpifnotbattletype BATTLE_TYPE_PYRAMID, BattleScript_FrontierTrainerBattleWon_End
-	pickup
+	generateendbattleitem
 BattleScript_FrontierTrainerBattleWon_End:
 	end2
 

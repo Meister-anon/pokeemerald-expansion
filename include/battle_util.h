@@ -88,6 +88,8 @@ enum ItemEffect
 #define CRITICAL_HIT_BLOCKED -1
 #define CRITICAL_HIT_ALWAYS  -2
 
+extern const u8 *const gPlayCryanims[];
+
 // for Natural Gift and Fling
 struct TypePower
 {

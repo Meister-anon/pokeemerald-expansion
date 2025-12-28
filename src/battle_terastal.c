@@ -65,6 +65,9 @@ bool32 CanTerastallize(u32 battler)
 
     if (gBattleMons[battler].volatiles.transformed && GET_BASE_SPECIES_ID(gBattleMons[battler].species) == SPECIES_TERAPAGOS)
         return FALSE;
+    
+    if (GET_BASE_SPECIES_ID(gBattleMons[battler].species) == SPECIES_ARCEUS)
+        return FALSE;
 
     // Prevents Zigzagoon from terastalizing in vanilla.
     if (gBattleTypeFlags & BATTLE_TYPE_FIRST_BATTLE && !IsOnPlayerSide(battler))

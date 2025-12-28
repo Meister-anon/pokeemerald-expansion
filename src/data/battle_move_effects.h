@@ -483,7 +483,7 @@ const struct BattleMoveEffect gBattleMoveEffects[NUM_BATTLE_MOVE_EFFECTS] =
 
     [EFFECT_CONVERSION_2] =
     {
-        .battleScript = BattleScript_EffectConversion2,
+        .battleScript = BattleScript_EffectConversionZ,
         .battleTvScore = 4,
         .encourageEncore = TRUE,
     },

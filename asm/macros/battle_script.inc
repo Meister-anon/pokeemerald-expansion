@@ -166,11 +166,20 @@
 	.4byte \jumpInstr
 	.endm
 
-	.macro jumpifability battler:req, ability:req, jumpInstr:req
+	.macro jumpbasedonability battler:req, ability:req, jumpCondition:req, jumpInstr:req
 	.byte 0x1e
 	.byte \battler
 	.2byte \ability
+	.byte \jumpCondition
 	.4byte \jumpInstr
+	.endm
+
+	.macro jumpifability battler:req, ability:req, jumpInstr:req
+	jumpbasedonability \battler, \ability, TRUE, \jumpInstr
+	.endm
+
+	.macro jumpifnotability	battler:req, ability:req, jumpInstr:req
+	jumpbasedonability \battler, \ability, FALSE, \jumpInstr
 	.endm
 
 	.macro jumpifsideaffecting battler:req, flags:req, jumpInstr:req
@@ -198,7 +207,7 @@
 	.4byte \jumpInstr
 	.endm
 
-	.macro jumpbasedontype battler:req, type:req, jumpIfType:req, jumpInstr:req
+	.macro typebasedjump battler:req, type:req, jumpIfType:req, jumpInstr:req
 	.byte 0x22
 	.byte \battler
 	.byte \type
@@ -207,11 +216,11 @@
 	.endm
 
 	.macro jumpiftype battler:req, type:req, jumpInstr:req
-	jumpbasedontype \battler, \type, TRUE, \jumpInstr
+	typebasedjump \battler, \type, TRUE, \jumpInstr
 	.endm
 
 	.macro jumpifnottype battler:req, type:req, jumpInstr:req
-	jumpbasedontype \battler, \type, FALSE, \jumpInstr
+	typebasedjump \battler, \type, FALSE, \jumpInstr
 	.endm
 
 	.macro getexp battler:req
@@ -357,10 +366,6 @@
 	.2byte \frames
 	.endm
 
-	.macro setchargingturn
-	.byte 0x40
-	.endm
-
 	.macro waitstate
 	.byte 0x3a
 	.endm
@@ -383,6 +388,10 @@
 
 	.macro end3
 	.byte 0x3f
+	.endm
+
+	.macro setchargingturn
+	.byte 0x40
 	.endm
 
 	.macro call instr:req
@@ -915,7 +924,7 @@
 	.4byte \failInstr
 	.endm
 
-	.macro settypetorandomresistance failInstr:req
+	.macro changetypetoresisttarget failInstr:req
 	.byte 0xa6
 	.4byte \failInstr
 	.endm
@@ -989,6 +998,7 @@
 	.4byte \jumpInstr
 	.endm
 
+	@unused
 	.macro handlefurycutter
 	.byte 0xb5
 	.endm
@@ -1104,7 +1114,7 @@
 	.byte \battler
 	.endm
 
-	.macro callenvironmentattack
+	.macro unused_0xcc
 	.byte 0xcc
 	.endm
 
@@ -1230,7 +1240,10 @@
 	.byte 0xe4
 	.endm
 
-	.macro pickup
+	@was pickup made general category
+	@added back rn just for shuckle berry juice
+	@& honey
+	.macro generateendbattleitem
 	.byte 0xe5
 	.endm
 
@@ -1802,6 +1815,12 @@
 @ helpful macros
 	.macro setstatchanger stat:req, stages:req, down:req
 	setbyte sSTATCHANGER, \stat | \stages << 3 | \down << 7
+	.endm
+
+	.macro setstatchangerviaAbility stages:req, down:req
+	getstatchangeIdfromability
+	copybyte sSTATCHANGER, sSTATCHANGEID 
+	addbyte sSTATCHANGER \stages << 3 | \down << 7
 	.endm
 
 	.macro setmoveeffect effect:req
@@ -2443,6 +2462,56 @@
 	waitmessage B_WAIT_TIME_LONG
 	.endm
 
+
+	.macro modifystatstageviaAbility battler:req, mode:req, amount:req, script:req, affectsUser:req, animation:req, readcustomSavedString:req, customString
+
+	@ \mode parameters
+	INCREASE = FALSE
+	DECREASE = TRUE
+
+	@ \animation parameters
+	ANIM_OFF = FALSE
+	ANIM_ON = TRUE
+
+
+	.ifb \customString
+		getuniqueabilitystring		
+	.endif
+
+	getstatchangeIdfromability
+	setstatchangerviaAbility \amount, \mode
+	.if \affectsUser == FALSE
+		statbuffchange \battler, STAT_CHANGE_ALLOW_PTR, \script
+	.else
+	.if \affectsUser == TRUE
+		statbuffchange BS_ATTACKER, STAT_CHANGE_ALLOW_PTR, \script
+	.endif
+	.endif
+	setgraphicalstatchangevalues
+	.if \animation == TRUE
+		playanimation \battler, B_ANIM_STATS_CHANGE, sB_ANIM_ARG1
+		waitanimation
+	.endif
+	.ifnb \customString
+		printstring \customString
+	.else	
+		.if \readcustomSavedString == TRUE
+			printSavedstring
+		.else
+		.if \readcustomSavedString == FALSE
+			.if \mode == DECREASE
+				printfromtable gStatDownStringIds
+			.else
+			.if \mode == INCREASE
+				printfromtable gStatUpStringIds
+			.endif
+			.endif
+		.endif
+		.endif
+	.endif
+	waitmessage B_WAIT_TIME_IMPORTANT_STRINGS
+	.endm
+
 	.macro flushtextbox
 	printstring STRINGID_EMPTYSTRING3
 	waitmessage 1
@@ -2462,5 +2531,110 @@
 	callnative BS_JumpIfGenConfigLowerThan
 	.2byte \tag
 	.byte \gen
+	.4byte \jumpInstr
+	.endm
+
+	@v my custom natives below here
+	.macro escapePreventionChecks battler:req, failInstr:req
+	callnative	BS_HandleEscapePrevention
+	.byte \battler
+	.4byte \failInstr
+	.endm
+
+	.macro getstatchangeIdfromability
+	callnative BS_GetStatChangeIdFromAbility
+	.endm
+
+	.macro getuniqueabilitystring
+	callnative BS_GetCustomAbilityString
+	.endm
+
+	.macro endturnskipwindrider battler:req, jumpInstr:req
+	callnative BS_endturnSkipWindRiderActivation
+	.byte \battler
+	.4byte \jumpInstr
+	.endm
+
+	.macro jumpifnotweatheraffected battler:req, weatherFlag:req, jumpInstr:req
+	callnative BS_jumpifnotweatheraffected
+	.byte \battler
+	.4byte \weatherFlag
+	.4byte \jumpInstr
+	.endm
+
+	@vsonic custom for belch buff can do in code think
+	.macro jumpifateberry battler:req, jumpInstr:req
+	callnative BS_jumpifateberry
+	.byte \battler
+	.4byte \jumpInstr
+	.endm
+
+	@vsonic affinity check not base type
+	@may change name affinitybasedjump
+	.macro affinitybasedjump battler:req, type:req, jumpIfAffinity:req, ptr:req
+	callnative BS_affinitybasedjump
+	.byte \battler
+	.byte \type
+	.byte \jumpIfAffinity
+	.4byte \ptr
+	.endm
+
+	.macro jumpiftypeAffinty battler:req, type:req, ptr:req
+	affinitybasedjump \battler, \type, TRUE, \ptr
+	.endm
+
+	.macro jumpifnottypeAffinty battler:req, type:req, ptr:req
+	affinitybasedjump \battler, \type, FALSE, \ptr
+	.endm
+
+	.macro jumpifhealblock battler:req, jumpptr:req
+	jumpifsideaffecting \battler, SIDE_STATUS_HEAL_BLOCK, \jumpptr
+	.endm
+
+	.macro jumpifembargo jumpptr:req
+	jumpifsideaffecting BS_ATTACKER, SIDE_STATUS_EMBARGO, \jumpptr
+	.endm
+
+	.macro setiondeluge
+	callnative BS_setiondeluge
+	.endm
+
+	@prob drop these in reorked intimidate script
+	@just add dark exclusion etc.
+	@plan for dark mon to still get boost from attempted 
+	@intimidate for things like defiant etc.
+	@vsonic custom look into EE intimidate script updates may be able to move to C code
+	.macro jumpifIgnoreIntimidateChecks jumpInstr:req
+	callnative BS_JumpifAttackerAbilitySkipsIntimidateChecks
+	.4byte \jumpInstr
+	.endm
+
+	@vsonic custom
+	.macro jumptoIntimidateLikeSpecificStatCheck
+	callnative BS_JumpToStatSpecificChecksForIntimidateLike
+	.endm
+
+	.macro tryactivateshowdownmodeMoveEnd
+	callnative BS_TryActivateResoluteMoveEnd
+	.endm
+
+	@think wrap into tryfiretwoturnmovewithoutcharging
+	.macro tryTimecontrol jumpInstr:req
+	callnative BS_TryActivateTimeControl
+	.4byte \jumpInstr
+	.endm
+
+	@specifically for yawn rework, so can clear rage status if yawned
+	.macro jumpclearRage ptr:req
+	callnative BS_JumpandClearRage
+	.4byte \ptr
+	.endm
+
+	.macro tryreturncaughtmonfromPc
+	callnative BS_trygetcaughtmonfromPc
+	.endm
+
+	.macro jumpifcanAccessPCpostcatch jumpInstr:req
+	callnative BS_JumpifShouldPostCatchAccessPC
 	.4byte \jumpInstr
 	.endm

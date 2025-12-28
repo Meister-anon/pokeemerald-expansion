@@ -369,11 +369,11 @@ static void Cmd_dofaintanimation(void);
 static void Cmd_cleareffectsonfaint(void);
 static void Cmd_jumpifstatus(void);
 static void Cmd_jumpifvolatile(void);
-static void Cmd_jumpifability(void);
+static void Cmd_jumpbasedonability(void);
 static void Cmd_jumpifsideaffecting(void);
 static void Cmd_jumpifstat(void);
 static void Cmd_jumpifstatignorecontrary(void);
-static void Cmd_jumpbasedontype(void);
+static void Cmd_typebasedjump(void);
 static void Cmd_getexp(void);
 static void Cmd_checkteamslost(void);
 static void Cmd_movevaluescleanup(void);
@@ -505,7 +505,7 @@ static void Cmd_mirrorcoatdamagecalculator(void);
 static void Cmd_disablelastusedattack(void);
 static void Cmd_trysetencore(void);
 static void Cmd_painsplitdmgcalc(void);
-static void Cmd_settypetorandomresistance(void);
+static void Cmd_changetypetoresisttarget(void);
 static void Cmd_setalwayshitflag(void);
 static void Cmd_copymovepermanently(void);
 static void Cmd_unused_0xA9(void);
@@ -568,7 +568,7 @@ static void Cmd_unused2(void);
 static void Cmd_switchoutabilities(void);
 static void Cmd_jumpifhasnohp(void);
 static void Cmd_unused_0xE4(void);
-static void Cmd_pickup(void);
+static void Cmd_GenerateItem_BattleEnd(void);
 static void Cmd_unused_0xE6(void);
 static void Cmd_unused_0xE7(void);
 static void Cmd_settypebasedhalvers(void);
@@ -628,11 +628,11 @@ void (*const gBattleScriptingCommandsTable[])(void) =
     Cmd_cleareffectsonfaint,                     //0x1B
     Cmd_jumpifstatus,                            //0x1C
     Cmd_jumpifvolatile,                          //0x1D
-    Cmd_jumpifability,                           //0x1E
+    Cmd_jumpbasedonability,                           //0x1E
     Cmd_jumpifsideaffecting,                     //0x1F
     Cmd_jumpifstat,                              //0x20
     Cmd_jumpifstatignorecontrary,                //0x21
-    Cmd_jumpbasedontype,                         //0x22
+    Cmd_typebasedjump,                         //0x22
     Cmd_getexp,                                  //0x23
     Cmd_checkteamslost,                          //0x24
     Cmd_movevaluescleanup,                       //0x25
@@ -764,7 +764,7 @@ void (*const gBattleScriptingCommandsTable[])(void) =
     Cmd_disablelastusedattack,                   //0xA3
     Cmd_trysetencore,                            //0xA4
     Cmd_painsplitdmgcalc,                        //0xA5
-    Cmd_settypetorandomresistance,               //0xA6
+    Cmd_changetypetoresisttarget,               //0xA6
     Cmd_setalwayshitflag,                        //0xA7
     Cmd_copymovepermanently,                     //0xA8
     Cmd_unused_0xA9,                             //0xA9
@@ -827,7 +827,7 @@ void (*const gBattleScriptingCommandsTable[])(void) =
     Cmd_switchoutabilities,                      //0xE2
     Cmd_jumpifhasnohp,                           //0xE3
     Cmd_unused_0xE4,                             //0xE4
-    Cmd_pickup,                                  //0xE5
+    Cmd_GenerateItem_BattleEnd,                                  //0xE5
     Cmd_unused_0xE6,                             //0xE6
     Cmd_unused_0xE7,                             //0xE7
     Cmd_settypebasedhalvers,                     //0xE8
@@ -1557,6 +1557,7 @@ static void Cmd_unused_0x3(void)
 }
 
 // The chance is 1/N for each stage.
+static const u32 sCriticalHitChance[]   = { 16, 6, 4, 2, 1 }; // 1/x  my version //3rd stage was 3 made 2 unsure since still full double crit
 static const u32 sGen7CriticalHitOdds[] = {24,  8,  2,  1,   1}; // 1/X
 static const u32 sGen6CriticalHitOdds[] = {16,  8,  2,  1,   1}; // 1/X
 static const u32 sCriticalHitOdds[]     = {16,  8,  4,  3,   2}; // 1/X, Gens 3,4,5
@@ -1571,7 +1572,7 @@ static inline u32 GetCriticalHitOdds(u32 critChance)
     if (GetConfig(CONFIG_CRIT_CHANCE) == GEN_2)
         return sGen2CriticalHitOdds[critChance];
 
-    return sCriticalHitOdds[critChance];
+    return sCriticalHitChance[critChance];
 }
 
 static inline u32 IsBattlerLeekAffected(u32 battler, enum HoldEffect holdEffect)
@@ -1790,6 +1791,10 @@ static inline void CalculateAndSetMoveDamage(struct DamageContext *ctx)
     }
 }
 
+//may put playspecies cry if high roll or crit here
+//this already occurs after all crit calc,
+//but since the other things call the relevant functions
+//I can prob put there in the util file I guess
 static void Cmd_damagecalc(void)
 {
     CMD_ARGS();
@@ -1978,6 +1983,8 @@ static void Cmd_adjustdamage(void)
     }
 }
 
+//odly not used
+//potentially take my version
 static void Cmd_multihitresultmessage(void)
 {
     CMD_ARGS();
@@ -2608,9 +2615,9 @@ static void Cmd_resultmessage(void)
         {
             gMultiHitCounter = 0;
             *moveResultFlags &= ~MOVE_RESULT_MISSED;
-            BattleScriptCall(BattleScript_MultiHitPrintStrings);
-            return;
-        }
+            //BattleScriptCall(BattleScript_MultiHitPrintStrings);
+            //return;
+        }//change this now multi hit continues after miss
 
         if (gBattleStruct->missStringId[gBattlerTarget] > B_MSG_AVOIDED_ATK) // Wonder Guard or Levitate
         {
@@ -2746,14 +2753,14 @@ static void Cmd_resultmessage(void)
 
 static void Cmd_printstring(void)
 {
-    CMD_ARGS(u16 id);
+    CMD_ARGS(u16 stringid);
 
     if (gBattleControllerExecFlags == 0)
     {
-        u16 id = (cmd->id == 0 ? gBattleScripting.savedStringId : cmd->id);
+        u16 stringid = (cmd->stringid == 0 ? gBattleScripting.savedStringId : cmd->stringid);
 
         gBattlescriptCurrInstr = cmd->nextInstr;
-        PrepareStringBattle(id, gBattlerAttacker);
+        PrepareStringBattle(stringid, gBattlerAttacker);
         gBattleCommunication[MSG_DISPLAY] = 1;
     }
 }
@@ -3743,7 +3750,7 @@ void SetMoveEffect(u32 battler, u32 effectBattler, enum MoveEffect moveEffect, c
                 gBattlescriptCurrInstr = BattleScript_MoveEffectEerieSpell;
             }
         }
-        break;
+        break;//gmax effects will remove
     case MOVE_EFFECT_RAISE_TEAM_ATTACK:
         if (!NoAliveMonsForEitherParty())
         {
@@ -4392,26 +4399,37 @@ static void Cmd_jumpifvolatile(void)
         gBattlescriptCurrInstr = cmd->nextInstr;
 }
 
-static void Cmd_jumpifability(void)
+static void Cmd_jumpbasedonability(void)
 {
-    CMD_ARGS(u8 battler, enum Ability ability, const u8 *jumpInstr);
+    CMD_ARGS(u8 battler, enum Ability ability, u8 jumpCondition, const u8 *jumpInstr);
 
     u32 battler;
     bool32 hasAbility = FALSE;
     enum Ability ability = cmd->ability;
 
-    switch (cmd->battler)
+    switch (cmd->battler) //change for cmd args update, hope works
     {
     default:
         battler = GetBattlerForBattleScript(cmd->battler);
+
         if (GetBattlerAbility(battler) == ability)
-            hasAbility = TRUE;
+        {
+            if (ability == ABILITY_STURDY) //can't figure to make more specific correctly so just leaving
+            {
+                if (IsBattlerAlive(battler))//mayu change to alive and above hp threshold? vsonic
+                    hasAbility = TRUE; //all ohko moves miss so if curr mvoe is effect ohko otherwise survives suicide moves if above quarter hp && gBattleMons[battler].hp >= (gBattleMons[battler].maxHP / 4
+                else
+                    hasAbility = FALSE;
+            }
+            else
+                hasAbility = TRUE;
+        }
         break;
     case BS_ATTACKER_SIDE:
         battler = IsAbilityOnSide(gBattlerAttacker, ability);
         if (battler)
         {
-            battler--;
+            --battler;
             hasAbility = TRUE;
         }
         break;
@@ -4419,22 +4437,36 @@ static void Cmd_jumpifability(void)
         battler = IsAbilityOnOpposingSide(gBattlerAttacker, ability);
         if (battler)
         {
-            battler--;
+            --battler;
             hasAbility = TRUE;
         }
         break;
     }
 
-    if (hasAbility)
+    if (cmd->jumpCondition == TRUE)// jump if has ability
     {
-        gLastUsedAbility = ability;
-        gBattlescriptCurrInstr = cmd->jumpInstr;
-        RecordAbilityBattle(battler, gLastUsedAbility);
-        gBattlerAbility = battler;
+        if (hasAbility)
+        {
+            gLastUsedAbility = ability;
+            gBattlescriptCurrInstr = cmd->jumpInstr;
+            RecordAbilityBattle(battler, gLastUsedAbility);
+            gBattlerAbility = battler;
+        }
+        else
+        {
+            gBattlescriptCurrInstr = cmd->nextInstr;
+        }
     }
-    else
+    else if (cmd->jumpCondition == FALSE) //jump if not has ability
     {
-        gBattlescriptCurrInstr = cmd->nextInstr;
+        if (!hasAbility)
+        {
+            gBattlescriptCurrInstr = cmd->jumpInstr;
+        }
+        else
+        {
+            gBattlescriptCurrInstr = cmd->nextInstr;
+        }
     }
 }
 
@@ -4486,7 +4518,7 @@ static void Cmd_jumpifstatignorecontrary(void)
         gBattlescriptCurrInstr = cmd->nextInstr;
 }
 
-static void Cmd_jumpbasedontype(void)
+static void Cmd_typebasedjump(void)
 {
     CMD_ARGS(u8 battler, u8 type, u8 jumpIfType, const u8 *jumpInstr);
 
@@ -6058,6 +6090,18 @@ static void Cmd_moveend(void)
             gBattleScripting.moveendState++;
             break;
         case MOVEEND_PROTECT_LIKE_EFFECT:
+                //double check but believe these conditions are unnecesssary
+                //and already handled by atk cancler isbattlerprotected logic
+                //passing those checks are what allows it to set touchedproetctlike
+                //gonna ask, maybe its something like making sure the item
+                //doesnt get lost? 
+                //no that doesn't make sense
+                //the only place to set touchedprotectlike is atkcanceler
+                //and sets it only if you dont have protectpads
+                //so losing the item at move end wouldnt do anything for this
+                //plus you're making contact w a protect
+                //so no chance of effects that would remove items
+                //on contact...remove on EE and run test to confirm is fine
             if (gProtectStructs[gBattlerAttacker].touchedProtectLike)
             {
                 enum ProtectMethod method = gProtectStructs[gBattlerTarget].protected;
@@ -7015,7 +7059,7 @@ static void Cmd_moveend(void)
                     effect = TRUE;
                 }
                 break;
-            case EFFECT_NATURAL_GIFT:
+            /*case EFFECT_NATURAL_GIFT:
                 if (!(gHitMarker & HITMARKER_UNABLE_TO_USE_MOVE) && GetItemPocket(gBattleMons[gBattlerAttacker].item) == POCKET_BERRIES)
                 {
                     u32 item = gBattleMons[gBattlerAttacker].item;
@@ -7035,7 +7079,7 @@ static void Cmd_moveend(void)
 
                     if (!TrySymbiosis(gBattlerAttacker, item, TRUE))
                         effect = TRUE;
-                }
+                }*/ //since don't want to remove berry on use
             default:
                 break;
             }
@@ -7870,9 +7914,9 @@ void TryHazardsOnSwitchIn(u32 battler, u32 side, enum Hazards hazardType)
         }
         break;
     }
-    case HAZARDS_STICKY_WEB:
+    case HAZARDS_STICKY_WEB: //vsonic will need change as stack 2 should affect non grounded foes?
         if (IsBattlerAffectedByHazards(battler, FALSE) && IsBattlerGrounded(battler, GetBattlerAbility(battler), GetBattlerHoldEffect(battler)))
-        {
+        {//plus need changed stat diffs
             gBattleScripting.battler = battler;
             SET_STATCHANGER(STAT_SPEED, 1, TRUE);
             BattleScriptCall(BattleScript_StickyWebOnSwitchIn);
@@ -9902,7 +9946,9 @@ static void Cmd_manipulatedamage(void)
     case DMG_BIG_ROOT:
         gBattleStruct->passiveHpUpdate[gBattlerAttacker] = -1 * GetDrainedBigRootHp(gBattlerAttacker, gBattleStruct->passiveHpUpdate[gBattlerAttacker]);
         break;
-    }
+    }//since dmg_big_root effect is only used by strength sap
+    //could get mist boost but simply setting up fallthrough rather
+    //than adding extra command to script
 
     gBattlescriptCurrInstr = cmd->nextInstr;
 }
@@ -10598,6 +10644,10 @@ static void Cmd_initmultihitstring(void)
 
     gBattlescriptCurrInstr = cmd->nextInstr;
 }
+
+//my macro unsure if need
+#define MON_CAN_BATTLE(mon) (((GetMonData(mon, MON_DATA_SPECIES) && GetMonData(mon, MON_DATA_IS_EGG) != TRUE && GetMonData(mon, MON_DATA_HP))))
+
 
 static void Cmd_forcerandomswitch(void)
 {
@@ -11508,8 +11558,8 @@ static void Cmd_painsplitdmgcalc(void)
     }
 }
 
-// Conversion 2
-static void Cmd_settypetorandomresistance(void)
+// Conversion z
+static void Cmd_changetypetoresisttarget(void)
 {
     CMD_ARGS(const u8 *failInstr);
 
@@ -12484,11 +12534,25 @@ static void Cmd_setsemiinvulnerablebit(void)
     gBattlescriptCurrInstr = cmd->nextInstr;
 }
 
+//decide toss in fly as two turn semi invul
+//that can skip charge just for more flying moves
 static bool32 CheckIfCanFireTwoTurnMoveNow(u8 battler, bool8 checkChargeTurnEffects)
 {
+    
     // Semi-invulnerable moves cannot skip their charge turn (except with Power Herb)
     if (gBattleMoveEffects[GetMoveEffect(gCurrentMove)].semiInvulnerableEffect == TRUE)
-        return FALSE;
+    {    
+        if (gCurrentMove == MOVE_FLY
+        && gBattleMons[battler].volatiles.semiInvulnerable == STATE_NONE)
+        {
+            u32 sidestatus = GetMoveEffectArg_Status(gCurrentMove);
+            if (gSideStatuses[GetBattlerSide(battler)] & sidestatus)
+                return TRUE;
+        }
+        else
+            return FALSE;
+    }
+    
 
     // If this move has charge turn effects, it must charge, activate them, then try to fire
     if (checkChargeTurnEffects && MoveHasChargeTurnAdditionalEffect(gCurrentMove))
@@ -12905,6 +12969,9 @@ static void Cmd_setgastroacid(void)
     }
 }
 
+//reworked effect set timer to 1
+//only decrement in end turn
+//handle sleep set in new canceler
 static void Cmd_setyawn(void)
 {
     CMD_ARGS(const u8 *failInstr);
@@ -12930,7 +12997,11 @@ static void Cmd_setyawn(void)
     }
     else
     {
-        gBattleMons[gBattlerTarget].volatiles.yawn = 2;
+        gBattleMons[gBattlerTarget].volatiles.yawn = 1;
+        //forgot I did this, they fall asleep anyway next turn
+        //but this is good for damage mitigator
+        //ex moves like thrash or rollout would stop immediately
+        CancelMultiTurnMoves(gBattlerTarget, SKY_DROP_IGNORE);
         gBattlescriptCurrInstr = cmd->nextInstr;
     }
 }
@@ -13219,77 +13290,58 @@ static void Cmd_unused_0xE4(void)
 {
 }
 
-static void Cmd_pickup(void)
-{
+static void Cmd_GenerateItem_BattleEnd(void) //effect will go in battle_util.c end turn ability clause, this will be kept here to prevent need to reordder bs macros
+//why is this a bs command when the ability has no in battle effect?
+{//ok all this was almost a waste pick up doesn't work how I thought it did. -_- it doesn't have an effect on battle
+    //but its effect is trigger by battle. I'm removing this and changing to a overworld/field effect function.
+    //putting here makes macro to be called at end of battle, it then sets an item from the list to your mons held item slot
+    //which would only apply if mon wasnt holding anything -_-
+
+    //will add end turn effect to battle_util.c to pick up random use item if not holding anything.
+    //and if succeeds anounce the picked up item and set to held item slot, like default function
+    //SetMonData(&gPlayerParty[i], MON_DATA_HELD_ITEM, &sPickupItems[j]); 
     CMD_ARGS();
 
-    u32 i, j;
+    s32 i;
     u16 species, heldItem;
+    u32 ability;
     u8 lvlDivBy10;
-    enum Ability ability;
 
-    if (!InBattlePike()) // No items in Battle Pike.
+    for (i = 0; i < PARTY_SIZE; ++i)
     {
-        bool32 isInPyramid = CurrentBattlePyramidLocation() != PYRAMID_LOCATION_NONE;
-        for (i = 0; i < PARTY_SIZE; i++)
+
+        species = GetMonData(&gPlayerParty[i], MON_DATA_SPECIES_OR_EGG);
+        ability = GetMonAbility(&gPlayerParty[i]);
+        heldItem = GetMonData(&gPlayerParty[i], MON_DATA_HELD_ITEM);
+        lvlDivBy10 = (GetMonData(&gPlayerParty[i], MON_DATA_LEVEL)-1) / 10; //Moving this here makes it easier to add in abilities like Honey Gather. 
+            
+        if (lvlDivBy10 > 9)
+            lvlDivBy10 = 9;
+
+        if (species == SPECIES_NONE
+        || species == SPECIES_EGG
+        || GetMonData(&gPlayerParty[i], MON_DATA_IS_EGG))
+            continue;
+                
+        if (species == SPECIES_SHUCKLE
+        && GetItemPocket(heldItem) == POCKET_BERRIES
+        && (Random() % 16) == 0)
         {
-            species = GetMonData(&gPlayerParty[i], MON_DATA_SPECIES_OR_EGG);
-            heldItem = GetMonData(&gPlayerParty[i], MON_DATA_HELD_ITEM);
-            lvlDivBy10 = (GetMonData(&gPlayerParty[i], MON_DATA_LEVEL)-1) / 10; //Moving this here makes it easier to add in abilities like Honey Gather.
-            if (lvlDivBy10 > 9)
-                lvlDivBy10 = 9;
+            heldItem = ITEM_BERRY_JUICE;
+            SetMonData(&gPlayerParty[i], MON_DATA_HELD_ITEM, &heldItem);
+        }//change this line to a script that will stop player, bufer found item to auto close window, and use AddBagItem, so it goes to bag.
+        //this will allow actually running a held item on pickup mon, getting more use out of them
 
-            ability = GetSpeciesAbility(species, GetMonData(&gPlayerParty[i], MON_DATA_ABILITY_NUM));
-
-            if (ability == ABILITY_PICKUP
-                && species != SPECIES_NONE
-                && species != SPECIES_EGG
-                && heldItem == ITEM_NONE
-                && (Random() % 10) == 0)
+        else if (ability == ABILITY_HONEY_GATHER
+        && heldItem == ITEM_NONE)
+        {
+            if ((lvlDivBy10 + 1 ) * 5 > Random() % 100)
             {
-                if (isInPyramid)
-                {
-                    heldItem = GetBattlePyramidPickupItemId();
-                    SetMonData(&gPlayerParty[i], MON_DATA_HELD_ITEM, &heldItem);
-                }
-                else
-                {
-                    u32 rand = Random() % 100;
-                    u32 percentTotal = 0;
-
-                    for (j = 0; j < ARRAY_COUNT(sPickupTable); j++)
-                    {
-                        percentTotal += sPickupTable[j].percentage[lvlDivBy10];
-                        if (rand < percentTotal)
-                        {
-                            SetMonData(&gPlayerParty[i], MON_DATA_HELD_ITEM, &sPickupTable[j].itemId);
-                            break;
-                        }
-                    }
-                }
-            }
-            else if (ability == ABILITY_HONEY_GATHER
-                && species != 0
-                && species != SPECIES_EGG
-                && heldItem == ITEM_NONE)
-            {
-                if ((lvlDivBy10 + 1 ) * 5 > Random() % 100)
-                {
-                    heldItem = ITEM_HONEY;
-                    SetMonData(&gPlayerParty[i], MON_DATA_HELD_ITEM, &heldItem);
-                }
-            }
-            else if (P_SHUCKLE_BERRY_JUICE == GEN_2
-                && species == SPECIES_SHUCKLE
-                && heldItem == ITEM_ORAN_BERRY
-                && (Random() % 16) == 0)
-            {
-                heldItem = ITEM_BERRY_JUICE;
+                heldItem = ITEM_HONEY;
                 SetMonData(&gPlayerParty[i], MON_DATA_HELD_ITEM, &heldItem);
             }
         }
     }
-
     gBattlescriptCurrInstr = cmd->nextInstr;
 }
 
@@ -14626,6 +14678,10 @@ static bool32 CriticalCapture(u32 odds)
     return FALSE;
 }
 
+//strike count unnecessarily confuses me,
+//but must be written that way for what its checking here
+//w change will consolidate effect multihit and strike count check
+//into consolidated multi hit move function
 bool32 IsMoveAffectedByParentalBond(u32 move, u32 battler)
 {
     if (move != MOVE_NONE && move != MOVE_UNAVAILABLE && move != MOVE_STRUGGLE
@@ -17946,6 +18002,7 @@ void BS_JumpIfAbilityPreventsRest(void)
         gBattlescriptCurrInstr = cmd->nextInstr;
 }
 
+//vsonic may need adjust for stack effect
 void BS_SetAttackerToStickyWebUser(void)
 {
     NATIVE_ARGS();

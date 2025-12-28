@@ -158,6 +158,9 @@ enum VolatileFlags
     V_BATON_PASSABLE = (1 << 0),
 };
 
+//bring over infatuatedwithbattlerId
+//remove wrappedby and wrappedmove
+
 /* Volatile status ailments
  * These are removed after exiting the battle or switching
  *  Enum,                                   Type                           Type, max value, flags */
