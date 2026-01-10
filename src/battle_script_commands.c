@@ -7445,7 +7445,6 @@ static void Cmd_setprotectlike(void)
         gProtectStructs[gBattlerAttacker].protected = protectMethod;
         gBattleCommunication[MULTISTRING_CHOOSER] = B_MSG_PROTECTED_ITSELF;
     }
-    gBattleMons[gBattlerAttacker].volatiles.protectUses++;
 
     gBattleMons[gBattlerAttacker].volatiles.consecutiveMoveUses++;
     gBattlescriptCurrInstr = cmd->nextInstr;

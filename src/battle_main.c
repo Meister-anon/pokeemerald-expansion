@@ -5622,22 +5622,6 @@ static void FreeResetData_ReturnToOvOrDoEvolutions(void)
     }
 }
 
-void TryResetProtectUseCounter(u32 battler)
-{
-    u32 lastMove = gLastResultingMoves[battler];
-    if (lastMove == MOVE_UNAVAILABLE)
-    {
-        gBattleMons[battler].volatiles.protectUses = 0;
-        return;
-    }
-
-    enum BattleMoveEffects lastEffect = GetMoveEffect(lastMove);
-    if (!gBattleMoveEffects[lastEffect].usesProtectCounter)
-    {
-        if (GetConfig(CONFIG_ALLY_SWITCH_FAIL_CHANCE) < GEN_9 || lastEffect != EFFECT_ALLY_SWITCH)
-            gBattleMons[battler].volatiles.protectUses = 0;
-    }
-}
 
 static void TryEvolvePokemon(void)
 {
